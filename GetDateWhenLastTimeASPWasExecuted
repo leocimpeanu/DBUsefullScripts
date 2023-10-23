@@ -1,0 +1,18 @@
+SELECT MSUL_ID
+		,d.object_id
+		,d.database_id
+		,OBJECT_NAME(object_id, database_id) 'proc name'
+		,MSUL_SP_Database
+		,MSUL_SP_Schema
+		,MSUL_MappingSource
+		,d.cached_time
+		,d.last_execution_time
+		,d.total_elapsed_time
+		,d.total_elapsed_time/d.execution_count AS [avg_elapsed_time]
+		,d.last_elapsed_time
+		,d.execution_count  
+		,GETDATE()
+	FROM sys.dm_exec_procedure_stats AS d  
+	INNER JOIN [Table where the list of SP to monitor are saved]  ON MSUL_SP_Name = OBJECT_NAME(object_id, database_id)
+	WHERE MSUL_IsActive = 1
+	ORDER BY [total_worker_time] DESC;  
