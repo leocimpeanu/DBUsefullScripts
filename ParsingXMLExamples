@@ -1,0 +1,9 @@
+/* XML Format:
+<additionaldata>
+  <IDs>811537538,8766124987</IDs>
+  <Username>Test1</Username>
+</additionaldata>
+*/
+
+SELECT a.XMLDataTypeCOlumn.value('(/additionaldata/Username)[1]', 'VARCHAR(20)') 
+FROM #tmp01 a
