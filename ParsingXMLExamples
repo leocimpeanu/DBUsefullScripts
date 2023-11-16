@@ -7,3 +7,27 @@
 
 SELECT a.XMLDataTypeCOlumn.value('(/additionaldata/Username)[1]', 'VARCHAR(20)') 
 FROM #tmp01 a
+
+
+--------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------
+
+/* XML Format
+  <ActionDesign>
+  <CommonDesign IsMandatory="False" IsChecked="False">
+    <CheckAlsoActions />
+  </CommonDesign>
+  <SpecificDesign>
+    <MailCategories />
+    <MailTemplates TranslateOptionSelected="false" DefaultTemplateID="505568">
+      <MailTemplateID>505568</MailTemplateID>
+    </MailTemplates>
+  </SpecificDesign>
+</ActionDesign>
+*/
+
+select ID
+  ,XMLColumn.value('(/ActionDesign/SpecificDesign/MailTemplates/@DefaultTemplateID)[1]','int') as DefaultTemplateID
+  ,mt.m.value('.','int') as MailtemplateID
+from TableContainingXMLColumn a
+outer apply a.XMLColumn.nodes('/ActionDesign/SpecificDesign/MailTemplates/MailTemplateID') as mt(m)
