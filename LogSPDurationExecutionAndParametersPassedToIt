@@ -1,0 +1,104 @@
+/*variables declaration inside the report I want to audit*/
+
+DECLARE @I_Category		INT = 2 /*BOR*/
+DECLARE @I_SP_Name		VARCHAR(1000) = OBJECT_NAME(@@PROCID)
+DECLARE @I_InputParams	XML = (SELECT parameter_name 
+							       FROM information_schema.PARAMETERS 
+							       WHERE specific_name = OBJECT_NAME(@@procid)
+									 AND PARAMETER_MODE = 'IN'
+							       FOR XML RAW ('ParameterName'), ELEMENTS XSINIL, ROOT('Parameter'))
+
+
+
+/* SP to log the execution */
+
+USE [DB_name]
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+ALTER PROCEDURE [dbo].[usp_User_Actions_Audit_Insert] 
+	 @I_StartDate	datetime
+	,@I_FinishDate	datetime
+	,@I_UserName    varchar(50)
+	,@I_Category	int
+	,@I_SP_Name		varchar(1000)
+	,@I_InputParams	xml
+	,@I_Error		varchar(8000)
+AS
+
+----------------------------------------------------
+/*
+declare @I_StartDate datetime = getdate()-1
+declare @I_FinishDate datetime = getdate()-1
+declare @I_UserName varchar(50) = 'sparkware\leonardci'
+declare @I_Category int = 1
+declare @I_SP_Name varchar(1000) = 'usp_test'
+declare @I_InputParams xml = 'params'
+declare @I_Error varchar(8000) = null
+
+exec [dbo].[usp_User_Actions_Audit_Insert] 
+	 @I_StartDate	
+	,@I_FinishDate	
+	,@I_UserName    
+	,@I_Category	
+	,@I_SP_Name		
+	,@I_InputParams	
+	,@I_Error		
+
+*/
+----------------------------------------------------
+
+BEGIN
+	BEGIN TRY	
+
+		-------------------- Variables declaration -------------------
+		DECLARE @O_ErrCode	      INT				
+	           ,@O_ErrMsg		  VARCHAR(2000)	    
+
+		SELECT @O_ErrCode = 0
+			  ,@O_ErrMsg = ''
+
+    if (@I_InputParam is null)
+  	begin
+  		set @O_ErrMsg = 'raise test error message for logging in dberrorslog'
+  		raiserror (@O_ErrMsg, 16,1)
+  	END
+		
+		-------------------- SP Main Code ----------------------------
+		insert into dbo.User_Actions_Audit ( UAA_StartDate
+											,UAA_FinishDate
+											,UAA_Durationtime
+											,UAA_UserName
+											,UAA_Category
+											,UAA_SP_Name
+											,UAA_InputParameters
+											,UAA_Error )
+		select @I_StartDate
+			  ,@I_FinishDate
+			  ,datediff(second,@I_StartDate,@I_FinishDate)
+			  ,@I_UserName
+			  ,@I_Category
+			  ,@I_SP_Name
+			  ,@I_InputParams
+			  ,@I_Error
+
+	END TRY
+
+	BEGIN CATCH 
+		IF @@TRANCOUNT >0 
+			ROLLBACK
+		
+		--Handle the error
+		EXEC dbo.usp_ErrorHandling_HandleSPErrors
+				@IO_ErrCode = @O_ErrCode output -- the output is optional
+				,@IO_ErrMsg = @O_ErrMsg output -- the output is optional
+					
+	END CATCH
+
+END
