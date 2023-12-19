@@ -1,0 +1,114 @@
+USE [DB_Name]
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[usp_ErrorHandling_HandleSPErrors]
+	@IO_ErrCode	INT OUTPUT
+	,@IO_ErrMsg	VARCHAR(8000) OUTPUT
+AS
+
+/* Testing: 
+
+declare @iErrCode int , @vcErrMsg varchar(8000)
+
+select @iErrCode =0 ,@vcErrMsg ='test'
+
+exec usp_ErrorHandling_HandleSPErrors
+	@IO_ErrCode=@iErrCode output
+	,@IO_ErrMsg=@vcErrMsg --output
+
+select top 1 @iErrCode,@vcErrMsg ,* from db_errors_log order by dberr_id desc
+
+select * from DBErrorsLog order by dberr_id desc
+
+*/
+BEGIN
+	-- Declarations
+	DECLARE @tMsg VARCHAR(8000)
+	DECLARE @iState	INT
+	DECLARE @iSeverity			INT
+	DECLARE @iLineNumber		INT
+	DECLARE @vcInstanceName		VARCHAR(1000)
+	DECLARE @vcSource			VARCHAR(1000)
+	DECLARE @vcDetails			VARCHAR(max)
+	
+	DECLARE @IsWriteToLog	bit
+	DECLARE @IsRaise		bit
+	
+------------------------------------- Main Execution Code -------------------------------------------
+
+	SET @IsWriteToLog=1		-- initilizing with 1
+	SET @IsRaise=0			-- initilizing with ZERO ! 
+
+
+	-- get values
+	--------------
+	SET @iState = ERROR_STATE()
+	SET @iSeverity=ISNULL(ERROR_SEVERITY(),0)
+	--select @IsWriteToLog=dbo.udf_EH_IsWithLogWriting (@iState,@iSeverity)	
+	--select @IsRaise=dbo.UDF_EH_IsWithRaiseError (@iState,@iSeverity)
+
+	SET @vcInstanceName = 'SPID '+CONVERT(VARCHAR,@@SPID)
+    
+    IF @IO_ErrCode=0
+	BEGIN
+		set @IO_ErrCode=1
+	END
+	
+    SET @vcSource= ISNULL(APP_NAME(),'')+':'+ISNULL(@@servername,'')+':'+ISNULL(DB_NAME(),'')+':'+ISNULL(ERROR_PROCEDURE(),'')
+	SET @iLineNumber=ERROR_LINE() 
+	SET @vcDetails=ISNULL(@IO_ErrMsg,'')+' / '+ISNULL(ERROR_MESSAGE(),'')
+	SET @tMsg=left('Error ' + CONVERT(VARCHAR(50), @IO_ErrCode) +
+		', Native Error ' + CONVERT(VARCHAR(50), ERROR_NUMBER()) +
+		', Severity ' + CONVERT(VARCHAR(5), @iSeverity) +
+		', Source ' + ISNULL(@vcSource, '-') + 
+		', Line ' + CONVERT(VARCHAR(5), @iLineNumber) + 
+		char(13)+Char(10) + @vcDetails,8000) 
+
+	-- Write to log:
+	---------------
+	IF @IsWriteToLog=1		-- a writing to log is requested
+		AND XACT_STATE() <> -1	-- the transaction state is not "open but unable to commit (-1)", means this INSERT has no meaning, and will raise an exception
+		AND XACT_STATE() <> 1	-- the transaction state is not "open and able to be committed (1)", 
+									-- since this open transaction probably will be rollbacked. performance consideration.
+	BEGIN
+ 
+		INSERT INTO dbo.DBErrorsLog 
+			(DBERR_Severity
+			,DBERR_Source
+			,DBERR_LineNumber
+			,DBERR_ErrCode
+			,DBERR_NativeErrCode
+			,DBERR_Details
+			,DBERR_InstanceName
+			,DBERR_Msg
+			)
+		VALUES
+			(@iSeverity
+			,@vcSource
+			,@iLineNumber
+			,@IO_ErrCode
+			,ERROR_NUMBER()
+			,@vcDetails	
+			,@vcInstanceName
+			,@tMsg
+			)	
+
+	END
+
+	-- Raise error:
+	--------------
+	IF @IsRaise=1	-- currently in this SP this is initilized as Zero...
+	BEGIN
+		RAISERROR(@tMsg,@iSeverity,@iState) WITH NOWAIT
+	END	
+
+	-- setting output parameters
+	SET @IO_ErrMsg = @tMsg
+		
+
+END
