@@ -1,0 +1,105 @@
+USE [DB_Name]
+GO
+ 
+ 
+/*--------------------------------------------------------------------------------------------
+-- On:
+-- By:
+-- Desc:
+-- Ver:
+--------------------------------------------------------------------------------------------*/
+ 
+/*************************************************************************************************/
+/* Create controler table */
+/*************************************************************************************************/
+ 
+DECLARE @to_id INT;
+ 
+IF NOT EXISTS ( SELECT *
+FROM INFORMATION_SCHEMA.tables
+WHERE table_name = 'MIG_20200429_CleanSpecialChars_Account_Private_Details_Controler'
+AND TABLE_SCHEMA = 'dbo')
+BEGIN
+CREATE TABLE DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details_Controler
+(
+LastIdBeenProcess INT,
+Stop_Migration BIT,
+To_ID INT,
+Chunks INT
+);
+ 
+SELECT @to_id = max([MIG_ID])
+FROM DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details WITH (NOLOCK);
+ 
+INSERT INTO DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details_Controler
+(LastIdBeenProcess, Stop_Migration, To_ID, Chunks)
+VALUES (0, 0, @to_id, 3000);
+ 
+END
+ 
+/*************************************************************************************************/
+/* Variable declaration */
+/*************************************************************************************************/
+ 
+DECLARE @from_ID INT,
+@MaxRowToMigrate INT,
+@chunks INT,
+@O_ErrCode INT,
+@O_ErrMsg VARCHAR(2000);
+ 
+ 
+SELECT @from_ID = LastIdBeenProcess,
+@MaxRowToMigrate = To_ID,
+@chunks = Chunks
+FROM DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details_Controler WITH (NOLOCK);
+ 
+ 
+SET @to_id = @from_ID + @chunks;
+ 
+/*************************************************************************************************/
+/* Main Migration */
+/*************************************************************************************************/
+ 
+SET NOCOUNT ON
+BEGIN TRY
+WHILE @from_ID <= @MaxRowToMigrate + @chunks
+BEGIN
+IF EXISTS
+(
+SELECT 1
+FROM DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details_Controler WITH (NOLOCK)
+WHERE Stop_Migration = 1
+)
+BEGIN
+RAISERROR('Loop broken by User.', -1, -1);
+BREAK;
+END
+ 
+----
+UPDATE dma
+SET APD_FName_Clean = T1.CleanString
+,APD_LName_Clean = T2.CleanString
+FROM [DB_Name].dbo.Account_Private_Details dma
+INNER JOIN DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details MIG ON dma.APD_ACC_ID = MIG.t_APD_ACC_ID
+CROSS APPLY DB_Name.dbo.CleanupSpecialChars_NonUnicode(APD_FName_Clean) T1
+CROSS APPLY DB_Name.dbo.CleanupSpecialChars_NonUnicode(APD_LName_Clean) T2
+WHERE MIG_ID >= @from_id and MIG_ID < @to_id
+OPTION (RECOMPILE);
+----
+ 
+UPDATE DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details_Controler
+SET LastIdBeenProcess = @to_id;
+ 
+SELECT @from_id = @to_id;
+SELECT @to_id = @from_id + @chunks;
+ 
+SELECT @chunks = Chunks
+FROM DB_Name.dbo.MIG_20200429_CleanSpecialChars_Account_Private_Details_Controler WITH (NOLOCK);
+ 
+ 
+END
+END TRY
+ 
+BEGIN CATCH
+SELECT ERROR_MESSAGE()
+END CATCH
